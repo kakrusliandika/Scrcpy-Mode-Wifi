@@ -82,12 +82,13 @@ wifi_adb_indonesia.bat
   ```
 - **Windows**
   - Install **Android Platform Tools** (Google) → add folder to **PATH**
-  - Install **scrcpy** (Chocolatey/Scoop/MSI) → add to **PATH**
+  - Install **scrcpy** (Chocolatey/Scoop/MSI) → add to **PATH** 
 - **Linux (Debian/Ubuntu)**  
   ```bash
   sudo apt update
   sudo apt install android-tools-adb scrcpy
   ```
+- or Visit **[https://github.com/Genymobile/scrcpy](https://github.com/Genymobile/scrcpy)**
 
 ---
 
