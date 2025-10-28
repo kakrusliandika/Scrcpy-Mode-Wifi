@@ -35,6 +35,7 @@ from pathlib import Path
 FILE_SETUP = "wifi_device_setup.json"
 FILE_CONN = "wifi_device_connect.json"
 DEFAULT_IP = "192.168.43.1"
+DEFAULT_ADB_PORT = 5555  # NEW: default ADB Wi‑Fi port (customizable)
 
 # ANSI colors (auto-disable if not TTY)
 class Colors:
@@ -130,12 +131,30 @@ def ask(prompt: str, default: str | None = None):
         return default
     return s
 
+def ask_int(prompt: str, default: int | None = None) -> int | None:
+    """Ask for an integer with default; returns None if user pressed Enter without default."""
+    s = ask(prompt, "" if default is None else str(default))
+    if not s.strip():
+        return default
+    try:
+        return int(s.strip())
+    except ValueError:
+        return default
+
 
 def press_enter(msg="Press Enter to continue..."):
     try:
         input(msg)
     except EOFError:
         pass
+
+def normalize_dest(ip_or_dest: str, port: int | None) -> str:
+    """Return 'ip:port' if port provided and ip has no port; otherwise return ip_or_dest as-is."""
+    ip_or_dest = (ip_or_dest or "").strip()
+    if ":" in ip_or_dest:
+        return ip_or_dest
+    p = port if port is not None else DEFAULT_ADB_PORT
+    return f"{ip_or_dest}:{p}"
 
 
 # ----------------------------------------------------------------------------
@@ -337,9 +356,9 @@ def device_props(serial: str) -> dict:
     ip = get_wifi_ip(serial)
     props["ip"] = ip or None
 
-    # Endpoint
+    # Endpoint (default uses DEFAULT_ADB_PORT; actual connected port may differ)
     if ip:
-        props["endpoint"] = f"{ip}:5555"
+        props["endpoint"] = f"{ip}:{DEFAULT_ADB_PORT}"
     else:
         props["endpoint"] = serial
 
@@ -363,7 +382,7 @@ def print_device_info(serial: str) -> dict:
     ip = info.get("ip")
     if ip:
         print("WIFI_IP    :", ip)
-        print("ADB_TCP    :", f"{ip}:5555")
+        print("ADB_TCP    :", f"{ip}:{DEFAULT_ADB_PORT}")
     else:
         print("WIFI_IP    : not available")
         print("ADB_TCP    :", serial)
@@ -393,6 +412,10 @@ def cmd_setup():
     setup_path = Path(FILE_SETUP)
     ensure_file_exists(setup_path)
 
+    # NEW: Ask once for the ADB Wi‑Fi port (default 5555) to be used for all devices
+    adb_port = ask_int(f"ADB Wi‑Fi port for tcpip (Press Enter for default {DEFAULT_ADB_PORT}): ", DEFAULT_ADB_PORT)
+    port_str = str(adb_port if adb_port else DEFAULT_ADB_PORT)
+
     # Wait for USB devices
     while True:
         serials = usb_serials_only()
@@ -417,7 +440,8 @@ def cmd_setup():
         brand = model = devname = ver = sdk = size = dpi = batt = ssid_cur = ip_cur = endp_cur = ""
 
         if usb_state == "device":
-            run(["adb", "-s", ser, "tcpip", "5555"])  # ignore errors
+            # Use chosen port instead of hardcoded 5555
+            run(["adb", "-s", ser, "tcpip", port_str])  # ignore errors
             run(["adb", "-s", ser, "wait-for-device"])  # ignore
 
             ip_cur = get_wifi_ip(ser)
@@ -435,7 +459,7 @@ def cmd_setup():
             ssid_cur = props.get("ssid", None) or ""
 
             if ip_cur:
-                endp_cur = f"{ip_cur}:5555"
+                endp_cur = f"{ip_cur}:{port_str}"
                 if ip_cur in seen_ips:
                     dup_ip = True
                 seen_ips.add(ip_cur)
@@ -583,7 +607,12 @@ def save_connect_json(target_serial: str, last_info: dict):
     if not ip_save and ":" in target_serial:
         ip_save = target_serial.split(":", 1)[0]
     serial_real = parse_first(run(["adb", "-s", target_serial, "get-serialno"])[1]) or target_serial
-    ep_save = f"{ip_save}:5555" if ip_save else target_serial
+
+    # NEW: preserve the actual target endpoint if it includes a custom port
+    if ":" in target_serial:
+        ep_save = target_serial
+    else:
+        ep_save = f"{ip_save}:{DEFAULT_ADB_PORT}" if ip_save else target_serial
 
     entry = {
         "timestamp": timestamp_now(),
@@ -634,8 +663,12 @@ def cmd_connect():
             target = targets[int(sel) - 1]["endpoint"]
 
     if not target:
-        ip = ask(f"Enter Android IP [default {DEFAULT_IP}] or press Enter for default: ", DEFAULT_IP)
-        target = f"{ip}:5555"
+        dest = ask(f"Enter Android IP (or IP:PORT) [default {DEFAULT_IP}]: ", DEFAULT_IP)
+        if ":" in dest:
+            target = dest.strip()
+        else:
+            port_in = ask_int(f"ADB Wi‑Fi port [default {DEFAULT_ADB_PORT}]: ", DEFAULT_ADB_PORT)
+            target = normalize_dest(dest, port_in)
 
     print()
     print(Colors.c("[ADB]", Colors.LBL), f"connecting to {target} ...")
@@ -650,6 +683,9 @@ def cmd_connect():
         return
 
     info = print_device_info(target)
+    # Also show the actual endpoint in case of custom port
+    print(Colors.c("ADB_TCP (connected):", Colors.DIM), target)
+
     save_connect_json(target, info)
     stay_ok = check_stay_awake_support(target)
 
@@ -680,7 +716,7 @@ def build_combined_list() -> list[dict]:
             serial = it.get("serial") or ""
             model = it.get("model") or ""
             ip = it.get("ip") or ""
-            endpoint = it.get("endpoint") or (f"{ip}:5555" if ip else "")
+            endpoint = it.get("endpoint") or (f"{ip}:{DEFAULT_ADB_PORT}" if ip else "")
             if not ip or ip in seen_ips:
                 continue
             seen_ips.add(ip)
@@ -757,6 +793,7 @@ def connect_from_list(target: str):
         return
 
     info = print_device_info(target)
+    print(Colors.c("ADB_TCP (connected):", Colors.DIM), target)
     save_connect_json(target, info)
     stay_ok = check_stay_awake_support(target)
 
@@ -814,7 +851,7 @@ def cmd_pair():
     c_ep = ask("Endpoint to connect [default derived from IP:5555]: ")
     if not c_ep:
         host = pair_ep.split(":", 1)[0]
-        c_ep = f"{host}:5555"
+        c_ep = f"{host}:{DEFAULT_ADB_PORT}"
     run(["adb", "connect", c_ep])
 
 
