@@ -3,17 +3,22 @@ setlocal EnableExtensions EnableDelayedExpansion
 cd /d %~dp0
 
 :: ============================================================
-::  wifi_adb.bat  —  Kotak Perkakas ADB Wi-Fi (all-in-one)
-::  - setup      : aktifkan ADB via Wi-Fi untuk perangkat USB + inventaris JSON
+::  wifi_adb.bat  —  ADB Wi‑Fi Toolbox (serba-ada)  [Port Kustom Diaktifkan]
+::  - setup      : aktifkan ADB melalui Wi‑Fi untuk perangkat USB + inventori JSON
 ::  - connect    : pilih dari daftar / IP manual, lalu jalankan scrcpy (preset + ekstra)
 ::  - list       : gabungkan & tampilkan perangkat dari JSON + status ADB
 ::  - usb-back   : kembalikan semua perangkat TCP ke mode USB
-::  - disconnect : putus semua koneksi TCP ADB
-::  - pair       : pairing ADB Wireless debugging (Android 11+)
+::  - disconnect : putuskan semua endpoint ADB TCP
+::  - pair       : pairing Debugging Nirkabel (Android 11+)
+::  Catatan:
+::    * Varian ini mempertahankan struktur asli namun memungkinkan pengaturan port ADB TCP/IP kustom
+::      (bawaan 5555) pada alur Setup dan Connect.
 :: ============================================================
 
 set "FILE_SETUP=wifi_device_setup.json"
 set "FILE_CONN=wifi_device_connect.json"
+set "DEFAULT_IP=192.168.43.1"
+set "DEFAULT_ADB_PORT=5555"
 
 call :UI_INIT
 
@@ -23,14 +28,14 @@ where adb >nul 2>&1
 if errorlevel 1 (
   title ADB tidak ditemukan
   echo %C_ERR%[KESALAHAN]%C_RST% adb tidak ditemukan di PATH
-  echo Pasang "Android Platform Tools" dan tambahkan adb ke PATH
-  echo Mencoba lagi dalam 5 detik - Tekan Ctrl+C untuk membatalkan
+  echo Instal "Android Platform Tools" dan tambahkan adb ke PATH
+  echo Coba lagi dalam 5 detik - Tekan Ctrl+C untuk membatalkan
   timeout /t 5 >nul
   goto :CHECK_ADB
 )
 adb start-server >nul 2>&1
 
-:: ---------------- Arahkan berdasarkan argumen -----------------
+:: ---------------- Rute berdasarkan argumen -----------------
 if /i "%~1"==""         goto :MAIN_MENU
 if /i "%~1"=="help"     goto :MAIN_MENU
 if /i "%~1"=="setup"    goto :CMD_SETUP
@@ -41,23 +46,23 @@ if /i "%~1"=="disconnect" goto :CMD_DISCONNECT_ALL
 if /i "%~1"=="pair"     goto :CMD_PAIR
 
 echo Perintah tidak dikenal: %~1
-echo Cara pakai: %~nx0 ^<setup^|connect^|list^|usb-back^|disconnect^|pair^|help^>
+echo Penggunaan: %~nx0 ^<setup^|connect^|list^|usb-back^|disconnect^|pair^|help^>
 exit /b 1
 
 :: ---------------- Menu utama ------------------------
 :MAIN_MENU
-title Kotak Perkakas ADB Wi-Fi
+title ADB Wi‑Fi Toolbox
 cls
 call :UI_BAR
 echo %C_TITLE%   A D B   W i - F i   T o o l b o x%C_RST%
 call :UI_BAR
-echo  %C_NUM%[1]%C_RST% %C_LBL%Setup   %C_DIM%: Aktifkan ADB via Wi-Fi (USB) + simpan ke %FILE_SETUP%%C_RST%
-echo  %C_NUM%[2]%C_RST% %C_LBL%Connect %C_DIM%: Pilih dari daftar / IP manual → preset scrcpy + ekstra%C_RST%
-echo  %C_NUM%[3]%C_RST% %C_LBL%List    %C_DIM%: Tampilkan perangkat dikenal (dari JSON) + status ADB%C_RST%
-echo  %C_NUM%[4]%C_RST% %C_LBL%USB-Back All%C_DIM%: Kembalikan semua perangkat TCP ke USB%C_RST%
-echo  %C_NUM%[5]%C_RST% %C_LBL%Disconnect All%C_DIM%: adb disconnect (semua endpoint)%C_RST%
-echo  %C_NUM%[6]%C_RST% %C_LBL%Pair    %C_DIM%: Pairing debugging nirkabel (Android 11+)%C_RST%
-echo  %C_NUM%[0]%C_RST% %C_LBL%Keluar%C_RST%
+echo  %C_NUM%[1]%C_RST% %C_LBL%Setup          %C_DIM%: Aktifkan ADB melalui Wi‑Fi (USB) + simpan ke %FILE_SETUP%%C_RST%
+echo  %C_NUM%[2]%C_RST% %C_LBL%Connect        %C_DIM%: Pilih dari daftar / IP manual → preset scrcpy + ekstra%C_RST%
+echo  %C_NUM%[3]%C_RST% %C_LBL%List           %C_DIM%: Tampilkan perangkat yang dikenal (dari JSON) + status ADB%C_RST%
+echo  %C_NUM%[4]%C_RST% %C_LBL%USB-Back All   %C_DIM%: Kembalikan semua perangkat TCP ke mode USB%C_RST%
+echo  %C_NUM%[5]%C_RST% %C_LBL%Disconnect All %C_DIM%: adb disconnect (semua endpoint)%C_RST%
+echo  %C_NUM%[6]%C_RST% %C_LBL%Pair           %C_DIM%: Pairing debugging nirkabel (Android 11+)%C_RST%
+echo  %C_NUM%[0]%C_RST% %C_LBL%Exit           %C_RST%
 call :UI_BAR
 set "m="
 set /p m="%C_ASK%Pilih:%C_RST% "
@@ -71,17 +76,24 @@ if "%m%"=="0" exit /b 0
 goto :MAIN_MENU
 
 :: =========================================================
-::  SETUP — Aktifkan ADB Wi-Fi untuk semua perangkat USB + inventaris
+::  SETUP — Aktifkan ADB melalui Wi‑Fi untuk semua perangkat USB + inventori
 :: =========================================================
 :CMD_SETUP
-title Penyiapan ADB Wi-Fi - simpan ke %FILE_SETUP%
+title Pengaturan ADB Wi‑Fi - simpan ke %FILE_SETUP%
 echo.
-echo %C_H1%=== Aktifkan ADB via Wi-Fi untuk SEMUA perangkat USB ===%C_RST%
+echo %C_H1%=== Aktifkan ADB melalui Wi‑Fi untuk SEMUA perangkat USB ===%C_RST%
 echo Info perangkat akan disimpan ke "%FILE_SETUP%"
 echo Tekan Ctrl+C kapan saja untuk membatalkan.
 echo.
 
 if not exist "%FILE_SETUP%" ( >"%FILE_SETUP%" echo [] )
+
+:: Tanyakan sekali port ADB Wi‑Fi untuk adb tcpip (bawaan 5555)
+set "ADB_PORT="
+set /p ADB_PORT="Port ADB Wi‑Fi untuk tcpip (bawaan %DEFAULT_ADB_PORT%): "
+if "%ADB_PORT%"=="" set "ADB_PORT=%DEFAULT_ADB_PORT%"
+for /f "delims=0123456789" %%x in ("%ADB_PORT%") do set "ADB_PORT="
+if "%ADB_PORT%"=="" set "ADB_PORT=%DEFAULT_ADB_PORT%"
 
 :WAIT_USB
 set "COUNT=0"
@@ -95,7 +107,7 @@ for /f "skip=1 tokens=1,2" %%A in ('adb devices') do (
   )
 )
 if %COUNT%==0 (
-  echo %C_NOTE%[USB] Menunggu perangkat USB dengan status device ... pastikan USB debugging AKTIF%C_RST%
+  echo %C_NOTE%[USB] Menunggu perangkat USB dengan state="device" ... pastikan Debugging USB diaktifkan%C_RST%
   timeout /t 2 >nul
   goto :WAIT_USB
 )
@@ -114,7 +126,7 @@ for /l %%I in (1,1,%COUNT%) do (
   set "SIZE="  & set "DPI="   & set "BATT="    & set "SSID_CUR=" & set "IP_CUR=" & set "ENDP_CUR="
 
   if /i "!USBSTATE!"=="device" (
-    adb -s !SER! tcpip 5555 >nul 2>&1
+    adb -s !SER! tcpip %ADB_PORT% >nul 2>&1
     adb -s !SER! wait-for-device >nul 2>&1
 
     call :GET_WIFI_IP "!SER!" IP_CUR
@@ -144,7 +156,7 @@ for /l %%I in (1,1,%COUNT%) do (
     if "!SSID_CUR!"=="=" set "SSID_CUR="
 
     if defined IP_CUR (
-      set "ENDP_CUR=!IP_CUR!:5555"
+      set "ENDP_CUR=!IP_CUR!:%ADB_PORT%"
       echo.!SEEN_IPS! | findstr /c:" !IP_CUR! " >nul && set "DUP_IP=1" || set "SEEN_IPS=!SEEN_IPS!!IP_CUR! "
       adb disconnect !ENDP_CUR! >nul 2>&1
       adb connect   !ENDP_CUR! >nul 2>&1
@@ -169,7 +181,7 @@ for /l %%I in (1,1,%COUNT%) do (
     echo ADB_TCP    : tidak tersedia
   )
 
-  REM --- simpan per-index untuk ringkasan yang akurat ---
+  REM --- simpan per indeks untuk ringkasan yang akurat ---
   set "MODEL_A[%%I]=!MODEL!"
   set "IP_A[%%I]=!IP_CUR!"
   set "EP_A[%%I]=!ENDP_CUR!"
@@ -193,8 +205,8 @@ for /l %%I in (1,1,%COUNT%) do (
 
 if defined DUP_IP (
   echo.
-  echo %C_WARN%[PERINGATAN]%C_RST% IP Wi-Fi duplikat terdeteksi di antarmuka/perangkat.
-  echo Gunakan satu SSID atau Windows Mobile Hotspot agar tiap perangkat mendapat IP unik.
+  echo %C_WARN%[PERINGATAN]%C_RST% Duplikasi IP Wi‑Fi terdeteksi antar antarmuka/perangkat.
+  echo Gunakan satu SSID atau Windows Mobile Hotspot agar setiap perangkat mendapat IP unik.
 )
 
 echo.
@@ -224,7 +236,7 @@ for /l %%I in (1,1,%COUNT%) do (
 echo.
 echo Data disimpan ke "%FILE_SETUP%"
 if /i "%~1"=="" (
-  echo Tekan tombol apa saja untuk kembali ke menu...
+  echo Tekan sembarang tombol untuk kembali ke menu...
   pause >nul
   goto :MAIN_MENU
 ) else exit /b 0
@@ -233,28 +245,39 @@ if /i "%~1"=="" (
 ::  CONNECT — Pilih dari daftar/JSON atau IP manual → scrcpy
 :: =========================================================
 :CMD_CONNECT
-title ADB Wi-Fi Connect + preset scrcpy
+title ADB Wi‑Fi Sambungkan + preset scrcpy
 echo.
-echo %C_H1%=== Sambungkan ke Android via ADB Wi-Fi dan jalankan scrcpy ===%C_RST%
-echo 1) Pastikan ponsel dan PC pada SSID Wi-Fi yang sama
-echo 2) ADB via Wi-Fi harus aktif (dari Setup atau Wireless debugging)
+echo %C_H1%=== Hubungkan ke Android melalui ADB Wi‑Fi dan jalankan scrcpy ===%C_RST%
+echo 1) Pastikan ponsel dan PC berada pada Wi‑Fi/SSID yang sama
+echo 2) ADB melalui Wi‑Fi harus diaktifkan (dari Setup atau Debugging nirkabel)
 echo.
 
 where scrcpy >nul 2>&1
 if errorlevel 1 (
-  echo %C_WARN%[PERINGATAN]%C_RST% scrcpy tidak ditemukan di PATH — kamu tetap bisa adb connect,
-  echo tetapi mirroring layar tidak akan berjalan. Pasang scrcpy untuk mirroring.
+  echo %C_WARN%[PERINGATAN]%C_RST% scrcpy tidak ditemukan di PATH — Anda tetap bisa adb connect,
+  echo namun mirroring layar tidak akan berjalan. Instal scrcpy untuk mirroring.
 )
 
 set "ip="
 set "TARGET="
 call :OFFER_LIST_COMBINED
 if not defined ip (
-  set /p ip="Masukkan IP Android [bawaan 192.168.43.1] atau Tekan Enter untuk bawaan: "
-  if "%ip%"=="" set "ip=192.168.43.1"
+  set /p ip="Masukkan IP Android (atau IP:PORT) [bawaan %DEFAULT_IP%]: "
+  if "%ip%"=="" set "ip=%DEFAULT_IP%"
 )
-if not defined TARGET set "TARGET=%ip%:5555"
-
+if not defined TARGET (
+  echo "%ip%" | findstr ":" >nul
+  if not errorlevel 1 (
+    set "TARGET=%ip%"
+  ) else (
+    set "ADB_PORT="
+    set /p ADB_PORT="Port ADB Wi‑Fi [bawaan %DEFAULT_ADB_PORT%]: "
+    if "%ADB_PORT%"=="" set "ADB_PORT=%DEFAULT_ADB_PORT%"
+    for /f "delims=0123456789" %%x in ("%ADB_PORT%") do set "ADB_PORT="
+    if "%ADB_PORT%"=="" set "ADB_PORT=%DEFAULT_ADB_PORT%"
+    set "TARGET=%ip%:%ADB_PORT%"
+  )
+)
 
 echo.
 echo %C_LBL%[ADB]%C_RST% menghubungkan ke %TARGET% ...
@@ -266,9 +289,9 @@ for /f "usebackq delims=" %%s in (`adb -s %TARGET% get-state 2^>nul`) do set "ST
 if /i not "%STATE%"=="device" (
   echo.
   echo %C_ERR%[KESALAHAN]%C_RST% Gagal terhubung sebagai "device". Status saat ini: "%STATE%"
-  echo Periksa IP Wi-Fi, SSID, dan pastikan ADB via Wi-Fi aktif di ponsel.
+  echo Periksa IP Wi‑Fi, SSID, dan pastikan ADB melalui Wi‑Fi aktif di ponsel.
   if /i "%~1"=="" (
-    echo Tekan tombol apa saja untuk kembali...
+    echo Tekan sembarang tombol untuk kembali...
     pause >nul & goto :MAIN_MENU
   ) else exit /b 2
 )
@@ -282,13 +305,13 @@ set "choice="
 :PROMPT_PRESET
 echo.
 echo Pilih preset scrcpy:
-echo   %C_NUM%[1]%C_RST% Rendah      : --video-bit-rate 2M   --max-size 800
-echo   %C_NUM%[2]%C_RST% Bawaan      : --video-bit-rate 8M   --max-size 1080
-echo   %C_NUM%[3]%C_RST% Tinggi      : --video-bit-rate 16M  --max-size 1440
-echo   %C_NUM%[4]%C_RST% SangatTinggi: --video-bit-rate 24M  --max-size 1440
-echo   %C_NUM%[5]%C_RST% Ultra       : --video-bit-rate 32M  --max-size 2160
-echo   %C_NUM%[6]%C_RST% Ekstrem     : --video-bit-rate 64M  --max-size 2160
-echo   %C_NUM%[7]%C_RST% SuperEkstrem: --video-bit-rate 72M  --max-size 2160
+echo   %C_NUM%[1]%C_RST% Rendah       : --video-bit-rate 2M   --max-size 800
+echo   %C_NUM%[2]%C_RST% Bawaan       : --video-bit-rate 8M   --max-size 1080
+echo   %C_NUM%[3]%C_RST% Tinggi       : --video-bit-rate 16M  --max-size 1440
+echo   %C_NUM%[4]%C_RST% Sangat Tinggi: --video-bit-rate 24M  --max-size 1440
+echo   %C_NUM%[5]%C_RST% Ultra        : --video-bit-rate 32M  --max-size 2160
+echo   %C_NUM%[6]%C_RST% Ekstrem      : --video-bit-rate 64M  --max-size 2160
+echo   %C_NUM%[7]%C_RST% Sangat Ekstrem: --video-bit-rate 72M  --max-size 2160
 set /p choice="Masukkan 1-7: "
 if "%choice%"=="1" (set "SCRCPY_OPTS=--video-bit-rate 2M --max-size 800") ^
 else if "%choice%"=="2" (set "SCRCPY_OPTS=--video-bit-rate 8M --max-size 1080") ^
@@ -302,17 +325,17 @@ else (echo Pilihan tidak valid. Coba lagi.& goto :PROMPT_PRESET)
 if /i "!STAY_OK!"=="1" ( set "SCRCPY_OPTS=%SCRCPY_OPTS% --stay-awake" ) ^
 else (
   echo.
-  echo %C_NOTE%[CATATAN]%C_RST% "stay-awake" tidak diizinkan pada perangkat/ROM ini; melanjutkan tanpa opsi itu.
+  echo %C_NOTE%[CATATAN]%C_RST% "stay-awake" tidak diizinkan pada perangkat/ROM ini; lanjut tanpa opsi tersebut.
 )
 
-:: ====== EKSTRA (tombol UX modern; semua opsi resmi scrcpy) ======
+:: ====== TAMBAHAN (opsional; opsi resmi scrcpy) ======
 echo.
-echo %C_H1%Ekstra (opsional):%C_RST% Tekan Enter untuk lewati atau isi Y/N
+echo %C_H1%Tambahan (opsional):%C_RST% Tekan Enter untuk lewati atau jawab Y/N
 set "yn="
 set /p yn="Selalu di atas? (--always-on-top) [y/N]: "
 if /i "%yn%"=="y" set "SCRCPY_OPTS=%SCRCPY_OPTS% --always-on-top"
 set "yn="
-set /p yn="Jendela tanpa batas? (--window-borderless) [y/N]: "
+set /p yn="Jendela tanpa bingkai? (--window-borderless) [y/N]: "
 if /i "%yn%"=="y" set "SCRCPY_OPTS=%SCRCPY_OPTS% --window-borderless"
 set "yn="
 set /p yn="Layar penuh? (--fullscreen) [y/N]: "
@@ -327,7 +350,7 @@ set "yn="
 set /p yn="Gunakan H.265/HEVC? (--video-codec=h265) [y/N]: "
 if /i "%yn%"=="y" set "SCRCPY_OPTS=%SCRCPY_OPTS% --video-codec=h265"
 set "yn="
-set /p yn="Batasi ke 60 fps? (--max-fps 60) [y/N]: "
+set /p yn="Batas 60 fps? (--max-fps 60) [y/N]: "
 if /i "%yn%"=="y" set "SCRCPY_OPTS=%SCRCPY_OPTS% --max-fps 60"
 
 set "ttl="
@@ -335,7 +358,7 @@ set /p ttl="Judul jendela kustom? (--window-title) [kosong = lewati]: "
 if not "%ttl%"=="" set "SCRCPY_OPTS=%SCRCPY_OPTS% --window-title \"%ttl%\""
 
 set "pos="
-set /p pos="Atur X,Y,Lebar,Tinggi? (contoh: 100,80,900,1600) [lewati=Enter]: "
+set /p pos="Atur X,Y,Lebar,Tinggi? (mis. 100,80,900,1600) [lewati=Enter]: "
 if not "%pos%"=="" (
   for /f "tokens=1-4 delims=," %%x in ("%pos%") do (
     set "SCRCPY_OPTS=%SCRCPY_OPTS% --window-x=%%x --window-y=%%y --window-width=%%z --window-height=%%w"
@@ -346,7 +369,7 @@ set "yn="
 set /p yn="Rekam ke MP4? (--record file.mp4) [y/N]: "
 if /i "%yn%"=="y" (
   set "recfile="
-  set /p recfile="  Nama file [bawaan record.mp4]: "
+  set /p recfile="  Nama berkas [bawaan record.mp4]: "
   if "%recfile%"=="" set "recfile=record.mp4"
   set "SCRCPY_OPTS=%SCRCPY_OPTS% --record \"%recfile%\""
 )
@@ -362,13 +385,13 @@ where scrcpy >nul 2>&1 && (
   echo %C_INFO%[INFO]%C_RST% scrcpy tidak terpasang, melewati peluncuran mirroring.
 )
 
-if /i "%~1"=="" (echo.& echo Tekan tombol apa saja untuk kembali ke menu...& pause >nul& goto :MAIN_MENU) else exit /b 0
+if /i "%~1"=="" (echo.& echo Tekan sembarang tombol untuk kembali ke menu...& pause >nul& goto :MAIN_MENU) else exit /b 0
 
 :: =========================================
-::  LIST — Gabungkan file JSON & tampilkan status ADB (READ-ONLY, no PowerShell)
+::  LIST — Gabung berkas JSON & tampilkan status ADB (HANYA BACA, tanpa PowerShell)
 :: =========================================
 :CMD_LIST
-title Daftar perangkat dikenal (READ-ONLY)
+title Daftar perangkat yang dikenal (HANYA BACA)
 
 echo.
 echo %C_H1%=== Membaca daftar perangkat dari JSON (hanya baca) ===%C_RST%
@@ -376,18 +399,18 @@ set "SZ1=?"
 set "SZ2=?"
 if exist "%FILE_SETUP%" for %%F in ("%FILE_SETUP%") do set "SZ1=%%~zF"
 if exist "%FILE_CONN%"  for %%F in ("%FILE_CONN%")  do set "SZ2=%%~zF"
-echo   %C_DIM%Info file:%C_RST% %FILE_SETUP% (size=%SZ1%) ^| %FILE_CONN% (size=%SZ2%)
+echo   %C_DIM%Info berkas:%C_RST% %FILE_SETUP% (ukuran=%SZ1%) ^| %FILE_CONN% (ukuran=%SZ2%)
 
 :: Bangun daftar gabungan TANPA PowerShell
 del /q ip_list.tmp >nul 2>&1
 call :BUILD_COMBINED_LIST "ip_list.tmp"
 
-:: Jika tidak ada output, jatuh ke diagnostik
+:: Jika tidak ada keluaran, kembali ke diagnostik
 if not exist ip_list.tmp goto :LIST_FALLBACK
 for %%# in (ip_list.tmp) do if "%%~z#"=="0" goto :LIST_FALLBACK
 findstr /r /n "." ip_list.tmp >nul 2>&1 || goto :LIST_FALLBACK
 
-:: ===== Tampilkan ringkasan seperti contoh kamu =====
+:: ===== Tampilkan ringkasan seperti contoh =====
 echo.
 echo %C_H1%===== RINGKASAN =====%C_RST%
 echo  No  Serial               Model                  IP              Endpoint          Status
@@ -416,7 +439,7 @@ for /f "usebackq tokens=1-5 delims=|" %%A in ("ip_list.tmp") do (
 
 echo.
 set "sel="
-set /p sel="Pilih No untuk CONNECT (Enter=Kembali): "
+set /p sel="Pilih No untuk TERHUBUNG (Enter=Kembali): "
 if "%sel%"=="" goto :MAIN_MENU
 
 :: Validasi angka sederhana
@@ -438,52 +461,52 @@ for /f "usebackq tokens=1-5 delims=|" %%A in ("ip_list.tmp") do (
 if not defined TARGET (
   echo.
   echo %C_ERR%[KESALAHAN]%C_RST% Nomor tidak valid.
-  echo Tekan tombol apa saja untuk kembali...
+  echo Tekan sembarang tombol untuk kembali...
   pause >nul
   goto :MAIN_MENU
 )
 
-:: === Langsung pakai alur CONNECT seperti menu [2] ===
+:: === Gunakan kembali alur CONNECT seperti menu [2] ===
 call :CONNECT_FROM_LIST "%TARGET%"
 goto :MAIN_MENU
 
 
 :LIST_FALLBACK
 echo.
-echo %C_WARN%[INFO]%C_RST% Tidak bisa membangun daftar gabungan (ip_list.tmp kosong/tiada).
-echo %C_DIM%Menampilkan isi mentah file JSON sebagai diagnostik:%C_RST%
+echo %C_WARN%[INFO]%C_RST% Tidak dapat membangun daftar gabungan (ip_list.tmp hilang/kosong).
+echo %C_DIM%Menampilkan isi berkas JSON mentah untuk diagnostik:%C_RST%
 if exist "%FILE_SETUP%" (
   echo --- %FILE_SETUP% ---
   type "%FILE_SETUP%"
 ) else (
-  echo (file %FILE_SETUP% tidak ada)
+  echo (berkas %FILE_SETUP% tidak ada)
 )
 echo.
 if exist "%FILE_CONN%" (
   echo --- %FILE_CONN% ---
   type "%FILE_CONN%"
 ) else (
-  echo (file %FILE_CONN% tidak ada)
+  echo (berkas %FILE_CONN% tidak ada)
 )
 echo.
-echo %C_DIM%(Jalankan %C_NUM%1%C_DIM%:Setup atau %C_NUM%2%C_DIM%:Connect untuk mengisi data jika kosong)%C_RST%
+echo %C_DIM%(Jalankan %C_NUM%1%C_DIM%:Setup atau %C_NUM%2%C_DIM%:Connect untuk mengisi data bila kosong)%C_RST%
 
 echo.
-echo Tekan tombol apa saja untuk kembali ke menu...
+echo Tekan sembarang tombol untuk kembali ke menu...
 pause >nul
 goto :MAIN_MENU
 
 
 :: =========================================
-::  SUB: CONNECT_FROM_LIST — alur sama seperti CMD_CONNECT
-::  Arg1: endpoint target (contoh: 192.168.43.1:5555)
+::  SUB: CONNECT_FROM_LIST — alur yang sama seperti CMD_CONNECT
+::  Arg1: endpoint target (mis. 192.168.43.1:5555)
 :: =========================================
 :CONNECT_FROM_LIST
 setlocal EnableDelayedExpansion
 set "TARGET=%~1"
 
 echo.
-echo %C_LBL%[ADB]%C_RST% connect ke %TARGET% ...
+echo %C_LBL%[ADB]%C_RST% menghubungkan ke %TARGET% ...
 adb disconnect %TARGET% >nul 2>&1
 adb connect %TARGET%
 
@@ -492,8 +515,8 @@ for /f "usebackq delims=" %%s in (`adb -s %TARGET% get-state 2^>nul`) do set "ST
 if /i not "%STATE%"=="device" (
   echo.
   echo %C_ERR%[KESALAHAN]%C_RST% Gagal terhubung sebagai "device". Status saat ini: "%STATE%"
-  echo Periksa IP/endpoint pada JSON dan bahwa ADB via Wi-Fi aktif di ponsel.
-  echo Tekan tombol apa saja untuk kembali...
+  echo Periksa IP/endpoint pada JSON dan pastikan ADB melalui Wi‑Fi aktif di ponsel.
+  echo Tekan sembarang tombol untuk kembali...
   pause >nul
   endlocal & goto :eof
 )
@@ -502,18 +525,18 @@ call :PRINT_DEVICE_INFO "%TARGET%"
 call :SAVE_CONNECT_JSON "%TARGET%"
 call :CHECK_STAY_AWAKE_SUPPORT "%TARGET%"
 
-:: ====== Preset kualitas video (sama seperti di CMD_CONNECT) ======
+:: ====== Preset video (sama seperti di CMD_CONNECT) ======
 set "choice="
 :PROMPT_PRESET_FROM_LIST
 echo.
 echo Pilih preset scrcpy:
-echo   %C_NUM%[1]%C_RST% Rendah      : --video-bit-rate 2M   --max-size 800
-echo   %C_NUM%[2]%C_RST% Bawaan      : --video-bit-rate 8M   --max-size 1080
-echo   %C_NUM%[3]%C_RST% Tinggi      : --video-bit-rate 16M  --max-size 1440
-echo   %C_NUM%[4]%C_RST% SangatTinggi: --video-bit-rate 24M  --max-size 1440
-echo   %C_NUM%[5]%C_RST% Ultra       : --video-bit-rate 32M  --max-size 2160
-echo   %C_NUM%[6]%C_RST% Ekstrem     : --video-bit-rate 64M  --max-size 2160
-echo   %C_NUM%[7]%C_RST% SuperEkstrem: --video-bit-rate 72M  --max-size 2160
+echo   %C_NUM%[1]%C_RST% Rendah       : --video-bit-rate 2M   --max-size 800
+echo   %C_NUM%[2]%C_RST% Bawaan       : --video-bit-rate 8M   --max-size 1080
+echo   %C_NUM%[3]%C_RST% Tinggi       : --video-bit-rate 16M  --max-size 1440
+echo   %C_NUM%[4]%C_RST% Sangat Tinggi: --video-bit-rate 24M  --max-size 1440
+echo   %C_NUM%[5]%C_RST% Ultra        : --video-bit-rate 32M  --max-size 2160
+echo   %C_NUM%[6]%C_RST% Ekstrem      : --video-bit-rate 64M  --max-size 2160
+echo   %C_NUM%[7]%C_RST% Sangat Ekstrem: --video-bit-rate 72M  --max-size 2160
 set /p choice="Masukkan 1-7: "
 if "%choice%"=="1" (set "SCRCPY_OPTS=--video-bit-rate 2M --max-size 800") ^
 else if "%choice%"=="2" (set "SCRCPY_OPTS=--video-bit-rate 8M --max-size 1080") ^
@@ -527,17 +550,17 @@ else (echo Pilihan tidak valid. Coba lagi.& goto :PROMPT_PRESET_FROM_LIST)
 if /i "!STAY_OK!"=="1" ( set "SCRCPY_OPTS=%SCRCPY_OPTS% --stay-awake" ) ^
 else (
   echo.
-  echo %C_NOTE%[CATATAN]%C_RST% "stay-awake" tidak diizinkan pada perangkat/ROM ini; melanjutkan tanpa opsi itu.
+  echo %C_NOTE%[CATATAN]%C_RST% "stay-awake" tidak diizinkan pada perangkat/ROM ini; lanjut tanpa opsi tersebut.
 )
 
-:: ====== Extras (opsional) ======
+:: ====== Tambahan (opsional) ======
 echo.
-echo %C_H1%Ekstra (opsional):%C_RST% Tekan Enter untuk lewati atau isi Y/N
+echo %C_H1%Tambahan (opsional):%C_RST% Tekan Enter untuk lewati atau jawab Y/N
 set "yn="
 set /p yn="Selalu di atas? (--always-on-top) [y/N]: "
 if /i "%yn%"=="y" set "SCRCPY_OPTS=%SCRCPY_OPTS% --always-on-top"
 set "yn="
-set /p yn="Jendela tanpa batas? (--window-borderless) [y/N]: "
+set /p yn="Jendela tanpa bingkai? (--window-borderless) [y/N]: "
 if /i "%yn%"=="y" set "SCRCPY_OPTS=%SCRCPY_OPTS% --window-borderless"
 set "yn="
 set /p yn="Layar penuh? (--fullscreen) [y/N]: "
@@ -552,7 +575,7 @@ set "yn="
 set /p yn="Gunakan H.265/HEVC? (--video-codec=h265) [y/N]: "
 if /i "%yn%"=="y" set "SCRCPY_OPTS=%SCRCPY_OPTS% --video-codec=h265"
 set "yn="
-set /p yn="Batasi ke 60 fps? (--max-fps 60) [y/N]: "
+set /p yn="Batas 60 fps? (--max-fps 60) [y/N]: "
 if /i "%yn%"=="y" set "SCRCPY_OPTS=%SCRCPY_OPTS% --max-fps 60"
 
 set "ttl="
@@ -560,7 +583,7 @@ set /p ttl="Judul jendela kustom? (--window-title) [kosong = lewati]: "
 if not "%ttl%"=="" set "SCRCPY_OPTS=%SCRCPY_OPTS% --window-title \"%ttl%\""
 
 set "pos="
-set /p pos="Atur X,Y,Lebar,Tinggi? (contoh: 100,80,900,1600) [lewati=Enter]: "
+set /p pos="Atur X,Y,Lebar,Tinggi? (mis. 100,80,900,1600) [lewati=Enter]: "
 if not "%pos%"=="" (
   for /f "tokens=1-4 delims=," %%x in ("%pos%") do (
     set "SCRCPY_OPTS=%SCRCPY_OPTS% --window-x=%%x --window-y=%%y --window-width=%%z --window-height=%%w"
@@ -571,7 +594,7 @@ set "yn="
 set /p yn="Rekam ke MP4? (--record file.mp4) [y/N]: "
 if /i "%yn%"=="y" (
   set "recfile="
-  set /p recfile="  Nama file [bawaan record.mp4]: "
+  set /p recfile="  Nama berkas [bawaan record.mp4]: "
   if "%recfile%"=="" set "recfile=record.mp4"
   set "SCRCPY_OPTS=%SCRCPY_OPTS% --record \"%recfile%\""
 )
@@ -588,18 +611,17 @@ where scrcpy >nul 2>&1 && (
 )
 
 echo.
-echo Tekan tombol apa saja untuk kembali...
+echo Tekan sembarang tombol untuk kembali...
 pause >nul
 endlocal & goto :eof
 
 
-
 :: =========================================
-::  SUB: BUILD_COMBINED_LIST  → hasilkan ip_list.tmp
+::  SUB: BUILD_COMBINED_LIST  → menghasilkan ip_list.tmp
 ::  Format baris: serial|model|ip|endpoint|source
-::  - Tahan BOM UTF-8
-::  - Dukung JSON objek tunggal {..} atau array [..]
-::  - Dedup per IP
+::  - Pertahankan BOM UTF‑8
+::  - Dukung objek tunggal {..} atau array [..]
+::  - Deduplikasi berdasarkan IP
 :: =========================================
 :BUILD_COMBINED_LIST
 set "OUT=%~1"
@@ -611,9 +633,9 @@ goto :eof
 
 
 :: =========================================
-::  SUB: PARSE_JSON_FILE  (pure batch, tolerant UTF-8 BOM)
-::  Arg1: path JSON, Arg2: output file
-::  Format output: serial|model|ip|endpoint|source
+::  SUB: PARSE_JSON_FILE  (murni batch, toleran UTF‑8 BOM)
+::  Arg1: path JSON, Arg2: berkas keluaran
+::  Format keluaran: serial|model|ip|endpoint|source
 :: =========================================
 :PARSE_JSON_FILE
 setlocal EnableDelayedExpansion
@@ -627,11 +649,11 @@ set "SER=" & set "MOD=" & set "IPX=" & set "EPX="
 for /f "usebackq delims=" %%L in ("%PTH%") do (
   set "L=%%L"
 
-  rem — buang BOM varian umum (kadang tampil 'ï»¿', kadang '∩╗┐')
+  rem — hapus variasi BOM umum (kadang tampil 'ï»¿', kadang '∩╗┐')
   set "L=!L:ï»¿=!"
   set "L=!L:∩╗┐=!"
 
-  rem — split pertama kali ketemu titik dua => kunci di %%k, nilai di %%l
+  rem — pecah pada titik dua pertama => kunci di %%k, nilai di %%l
   for /f "tokens=1,* delims=:" %%k in ("!L!") do (
     set "K=%%k"
     set "V=%%l"
@@ -648,11 +670,11 @@ for /f "usebackq delims=" %%L in ("%PTH%") do (
     if /i "!K!"=="endpoint" ( set "TMP=!V!" & call :CLEANVAL TMP EPX )
   )
 
-  rem — jika ketemu penutup objek, commit satu baris
+  rem — saat kurung kurawal penutup terlihat, commit satu baris
   if not "!L!"=="!L:}=!" (
-    if not defined EPX if defined IPX set "EPX=!IPX!:5555"
+    if not defined EPX if defined IPX set "EPX=!IPX!:%DEFAULT_ADB_PORT%"
     if defined SER if defined MOD if defined IPX if defined EPX (
-      rem dedup per IP
+      rem deduplikasi berdasarkan IP
       set "DUP="
       if exist "!OUTF!" (
         findstr /c:"|!IPX!|" "!OUTF!" >nul 2>&1 && set "DUP=1"
@@ -670,13 +692,13 @@ endlocal & goto :eof
 
 :: =========================================
 ::  SUB: CLEANVAL  (bersihkan nilai JSON -> polos)
-::  Arg1: var sumber (nama), Arg2: var tujuan (nama)
+::  Arg1: nama variabel sumber, Arg2: nama variabel target
 :: =========================================
 :CLEANVAL
 setlocal EnableDelayedExpansion
 set "v=!%~1!"
 
-rem buang koma di ujung, kutip, dan spasi awal/akhir
+rem hapus koma di akhir, kutip, dan spasi depan/belakang
 set "v=!v:,=!"
 set "v=!v:"=!"
 for /f "tokens=* delims= " %%z in ("!v!") do set "v=%%z"
@@ -696,8 +718,9 @@ goto :eof
 :: =================================================
 :CMD_USBBACK
 title USB-Back semua perangkat TCP
+
 echo.
-echo Mengalihkan semua endpoint TCP kembali ke USB...
+echo Mengembalikan semua endpoint TCP ke mode USB...
 for /f "skip=1 tokens=1,2" %%A in ('adb devices') do (
   echo %%A | findstr ":" >nul
   if not errorlevel 1 (
@@ -713,6 +736,7 @@ if /i "%~1"=="" (echo.& pause & goto :MAIN_MENU) else exit /b 0
 :: =================================================
 :CMD_DISCONNECT_ALL
 title adb disconnect (semua)
+
 echo.
 echo Memutus semua endpoint ADB TCP...
 adb disconnect >nul 2>&1
@@ -720,12 +744,13 @@ echo Selesai.
 if /i "%~1"=="" (echo.& pause & goto :MAIN_MENU) else exit /b 0
 
 :: =================================================
-::  PAIR — Pairing debugging nirkabel
+::  PAIR — Debugging nirkabel (pairing)
 :: =================================================
 :CMD_PAIR
-title ADB Pair (Wireless debugging)
+title ADB Pair (Debugging nirkabel)
+
 echo.
-echo %C_H1%=== ADB Wireless debugging (Android 11+) ===%C_RST%
+echo %C_H1%=== Debugging nirkabel ADB (Android 11+) ===%C_RST%
 set "PAIR_EP="
 set /p PAIR_EP="Masukkan endpoint pairing (mis. 192.168.1.10:37187): "
 if "%PAIR_EP%"=="" (echo Endpoint wajib diisi.& if /i "%~1"=="" (pause & goto :MAIN_MENU) else exit /b 1)
@@ -742,22 +767,22 @@ if not "%PAIR_CODE%"=="" (
 )
 
 echo.
-echo Jika pairing sukses, sambungkan endpoint perangkat (biasanya IP:5555).
+echo Jika pairing berhasil, sambungkan endpoint perangkat (biasanya IP:PORT). Port bawaan adalah %DEFAULT_ADB_PORT%.
 set "C_EP="
-set /p C_EP="Endpoint untuk connect [bawaan turunan dari IP:5555]: "
+set /p C_EP="Endpoint untuk disambungkan [bawaan dari IP:%DEFAULT_ADB_PORT%]: "
 if "%C_EP%"=="" (
-  for /f "tokens=1 delims=:" %%h in ("%PAIR_EP%") do set "C_EP=%%h:5555"
+  for /f "tokens=1 delims=:" %%h in ("%PAIR_EP%") do set "C_EP=%%h:%DEFAULT_ADB_PORT%"
 )
 adb connect %C_EP%
 if /i "%~1"=="" (echo.& pause & goto :MAIN_MENU) else exit /b 0
 
-:: ===================== SUBROUTIN =====================
+:: ===================== SUBROUTINES =====================
 
 :ENSURE_JSON_ARRAY
 set "PTH=%~1"
 if not defined PTH goto :eof
 
-rem -- Kalau PowerShell ada, pakai yang lama (biar rapi):
+rem -- Jika PowerShell ada, gunakan metode sebelumnya (lebih rapi):
 where powershell >nul 2>&1 && (
   powershell -NoProfile -Command ^
    "$ErrorActionPreference='SilentlyContinue';" ^
@@ -772,7 +797,7 @@ where powershell >nul 2>&1 && (
   goto :eof
 )
 
-rem -- Fallback murni Batch: bungkus/konversi isi sekarang jadi array
+rem -- Fallback Batch murni: bungkus/konversi konten saat ini menjadi array JSON
 if not exist "%PTH%" ( >"%PTH%" echo [] & goto :eof )
 
 del /q "__arr.tmp" >nul 2>&1
@@ -805,7 +830,7 @@ set /a N=0
 for /f "usebackq delims=" %%O in ("__arr.tmp") do (
   if not "%%O"=="" (
     set /a N+=1
-    if !N! gtr 1 (>>"%PTH%" echo  , %%O) else (>>"%PTH%" echo   %%O)
+    if !N! gtr 1 (>>"%PTH%" echo   , %%O) else (>>"%PTH%" echo   %%O)
   )
 )
 endlocal & >>"%PTH%" echo ]
@@ -818,7 +843,7 @@ goto :eof
 set "PTH=%~1"
 if not exist "%PTH%" ( >"%PTH%" echo [] )
 
-rem -- Coba cabang PowerShell dulu (kalau ada), termasuk dedup by IP:
+rem -- Coba cabang PowerShell terlebih dahulu (jika ada), termasuk dedup via IP:
 where powershell >nul 2>&1 && (
   powershell -NoProfile -Command ^
    "$ErrorActionPreference='SilentlyContinue';" ^
@@ -827,13 +852,13 @@ where powershell >nul 2>&1 && (
    "try{ $cur = if (Test-Path -LiteralPath $p){ Get-Content -Raw -LiteralPath $p | ConvertFrom-Json } else { @() } }catch{ $cur=$null }" ^
    "if ($null -eq $cur) { $raw = if (Test-Path -LiteralPath $p){ Get-Content -Raw -LiteralPath $p } else { '' }; $raw2='['+($raw -replace '}\s*[\r\n]+\s*{','},{')+']'; try{ $cur=$raw2|ConvertFrom-Json }catch{ $cur=@() } }" ^
    "$arr = if ($cur -is [array]) { $cur } else { @($cur) }" ^
-   "$newip = [string]$entry.ip; $done=$false; for($i=0;$i -lt $arr.Count;$i++){ if([string]$arr[$i].ip -eq $newip -and $newip){ $arr[$i]=$entry; $done=$true; break } }" ^
+   "$newip = [string]$entry.ip; $done=$false; for($i=0;$i -lt $arr.Count;$i++){ if([string]$arr[$i].ip -eq $newip -and $newip){ $arr[$i]=$entry; $done=true; break } }" ^
    "if(-not $done){ $arr += $entry }" ^
    "$arr | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $p -Encoding UTF8"
   goto :eof
 )
 
-rem -- Fallback murni Batch: rebuild array = (objek lama) + (entri baru)
+rem -- Fallback Batch murni: bangun ulang array = (objek lama) + (entri baru)
 call :ENSURE_JSON_ARRAY "%PTH%"
 
 del /q "__arr.tmp" >nul 2>&1
@@ -846,16 +871,13 @@ for /f "usebackq delims=" %%L in ("%PTH%") do (
   for /f "tokens=* delims= " %%z in ("!L!") do set "T=%%z"
 
   if not defined INOBJ (
-    echo !T! | findstr /b /c:"{" >nul && ( set "INOBJ=1" & set "ACC=%%L" )
+    echo !T! | findstr /c:"{" >nul && ( set "INOBJ=1" & set "ACC=!L!" )
   ) else (
-    set "ACC=!ACC!%%L"
+    set "ACC=!ACC!!L!"
   )
-
-  if not "%%L"=="%%L:}=%%" (
-    if defined INOBJ (
-      >>"__arr.tmp" echo !ACC!
-      set "ACC=" & set "INOBJ="
-    )
+  echo !L! | findstr /c:"}" >nul && if defined INOBJ (
+    >>"__arr.tmp" echo !ACC!
+    set "ACC=" & set "INOBJ="
   )
 )
 
@@ -869,17 +891,17 @@ set /a N=0
 for /f "usebackq delims=" %%O in ("__arr.tmp") do (
   if not "%%O"=="" (
     set /a N+=1
-    if !N! gtr 1 (>>"%PTH%" echo  , %%O) else (>>"%PTH%" echo   %%O)
+    if !N! gtr 1 (>>"%PTH%" echo   , %%O) else (>>"%PTH%" echo   %%O)
   )
 )
 >>"%PTH%" echo ]
-endlocal
-del /q "__arr.tmp" >nul 2>&1
+
+del /q "__entry.tmp" "__arr.tmp" >nul 2>&1
 goto :eof
 
 
 :GET_WIFI_IP
-:: %1 = SERIAL (dalam tanda kutip), %2 = nama variabel keluaran
+:: %1 = SERIAL (quoted), %2 = nama variabel keluaran
 set "%2="
 for /f "usebackq tokens=4" %%x in (`adb -s %~1 shell ip -o -4 addr show wlan0 2^>nul`) do (
   for /f "delims=/ " %%q in ("%%x") do if not defined %2 set "%2=%%q"
@@ -946,6 +968,10 @@ if not defined IP_CUR (
 )
 echo !IP_CUR! | findstr /r "^[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*$" >nul || set "IP_CUR="
 
+set "CUR_PORT="
+for /f "tokens=2 delims=:" %%p in ("%SER%") do set "CUR_PORT=%%p"
+if "%CUR_PORT%"=="" set "CUR_PORT=%DEFAULT_ADB_PORT%"
+
 echo.
 call :UI_SEP
 echo MEREK      : !BRAND!
@@ -958,7 +984,7 @@ if defined BATT (echo BATERAI    : !BATT!%%) else echo BATERAI    : tidak diketa
 if defined SSID_CUR (echo SSID       : !SSID_CUR!) else echo SSID       : tidak tersedia
 if defined IP_CUR (
   echo IP_WIFI    : !IP_CUR!
-  echo ADB_TCP    : !IP_CUR!:5555
+  echo ADB_TCP    : !IP_CUR!:!CUR_PORT!
 ) else (
   echo IP_WIFI    : tidak tersedia
   echo ADB_TCP    : %SER%
@@ -983,23 +1009,23 @@ goto :eof
 
 
 :SAVE_CONNECT_JSON
-rem Simpan entri koneksi KE FILE (skip jika device+model sudah ada).
-rem Arg1: endpoint target (contoh: 192.168.43.1:5555)
+rem Simpan entri koneksi KE BERKAS (lewati jika kombinasi device+model sudah ada).
+rem Arg1: endpoint target (mis. 192.168.43.1:5555)
 setlocal EnableDelayedExpansion
 
 if not defined FILE_CONN set "FILE_CONN=wifi_device_connect.json"
 set "TARGET_IN=%~1"
 
-rem --- Ekstrak host dari TARGET (untuk IP_SAVE) ---
+rem --- Ambil host dari TARGET (untuk IP_SAVE) ---
 set "IP_SAVE="
 for /f "tokens=1 delims=:" %%h in ("%TARGET_IN%") do set "IP_SAVE=%%h"
 
-rem --- Ambil serial nyata (kalau gagal, pakai TARGET) ---
+rem --- Ambil serial asli (jika gagal, gunakan TARGET) ---
 set "SER_REAL="
 for /f "usebackq delims=" %%x in (`adb -s "!TARGET_IN!" get-serialno 2^>nul`) do set "SER_REAL=%%x"
 if "!SER_REAL!"=="" set "SER_REAL=!TARGET_IN!"
 
-rem --- Jika PRINT_DEVICE_INFO sebelumnya isi IP_CUR, pakai itu ---
+rem --- Jika PRINT_DEVICE_INFO sebelumnya menetapkan IP_CUR, gunakan itu ---
 if defined IP_CUR set "IP_SAVE=!IP_CUR!"
 
 rem --- Siapkan field JSON dari metadata terakhir ---
@@ -1020,13 +1046,15 @@ if defined IP_SAVE (
   set "J_IP="!VAL!""
 )
 
-set "EP_SAVE="
-if defined IP_SAVE (set "EP_SAVE=!IP_SAVE!:5555") else set "EP_SAVE=!TARGET_IN!"
+set "EP_SAVE=!TARGET_IN!"
+if "%EP_SAVE%"=="" (
+  if defined IP_SAVE (set "EP_SAVE=!IP_SAVE!:%DEFAULT_ADB_PORT%") else set "EP_SAVE=!TARGET_IN!"
+)
 call :JFIELD EP_SAVE J_EP
 
 > "__entry.tmp" echo {"timestamp":"%date% %time%","serial":"!SER_REAL!","brand":!J_BRAND!,"model":!J_MODEL!,"device":!J_DEVICE!,"android":!J_ANDROID!,"sdk":!J_SDK!,"resolution":!J_RES!,"dpi":!J_DPI!,"battery":!J_BATT!,"ssid":!J_SSID!,"ip":!J_IP!,"endpoint":!J_EP!}
 
-rem --- Tarik semua objek lama (array/NDJSON/objek tunggal) jadi 1-baris/objek ---
+rem --- Tarik semua objek lama (array/NDJSON/objek tunggal) menjadi 1 baris/objek ---
 del /q "__arr2.tmp" >nul 2>&1
 if exist "%FILE_CONN%" (
   set "ACC=" & set "INOBJ="
@@ -1045,7 +1073,7 @@ if exist "%FILE_CONN%" (
   )
 )
 
-rem --- Cek DUP berdasarkan device+model: kalau ada, SKIP append ---
+rem --- Cek DUP berdasarkan device+model: jika ada, LEWATI append ---
 set "DUP=0"
 set "PAT_DEV=\"device\":\"!DEVNAME!\""
 set "PAT_MOD=\"model\":\"!MODEL!\""
@@ -1066,13 +1094,13 @@ if exist "__arr2.tmp" (
 )
 
 if not "%DUP%"=="1" (
-  rem --- belum ada pasangan device+model -> tambahkan entri baru ---
+  rem --- pasangan device+model belum ada -> tambahkan entri baru ---
   type "__entry.tmp" >> "__arr2.tmp"
 ) else (
-  echo %C_INFO%[SKIP]%C_RST% Kombinasi device+model sudah ada, tidak menambah entri baru.
+  echo %C_INFO%[LEWATI]%C_RST% kombinasi device+model sudah ada; tidak menambahkan entri baru.
 )
 
-rem --- Tulis ulang sebagai ARRAY JSON valid ---
+rem --- Tulis ulang sebagai ARRAY JSON yang valid ---
 > "%FILE_CONN%" echo [
 set /a __N=0
 for /f "usebackq delims=" %%O in ("__arr2.tmp") do (
@@ -1085,14 +1113,14 @@ for /f "usebackq delims=" %%O in ("__arr2.tmp") do (
 
 del /q "__entry.tmp" "__arr2.tmp" "__flt1.tmp" "__flt2.tmp" >nul 2>&1
 
-for %%F in ("%FILE_CONN%") do echo %C_INFO%[WRITE]%C_RST% Tersimpan ke "%%~nxF" (size=%%~zF)
+for %%F in ("%FILE_CONN%") do echo %C_INFO%[TULIS]%C_RST% Disimpan ke "%%~nxF" (ukuran=%%~zF)
 
 endlocal & goto :eof
 
 
 
 :REWRITE_AS_ARRAY
-rem Arg1: file yang berisi objek per baris, Arg2: file tujuan JSON array
+rem Arg1: file berisi satu objek per baris, Arg2: tujuan array JSON
 setlocal EnableDelayedExpansion
 set "IN=%~1"
 set "DST=%~2"
@@ -1141,7 +1169,7 @@ set /a j=0
 for /f "usebackq tokens=1-5 delims=|" %%a in ("ip_list.tmp") do (
   set /a j+=1
   if "!j!"=="%sel%" (
-    rem ambil IP & endpoint yang benar dari kolom ke-3 dan ke-4
+    rem pilih IP & endpoint yang benar dari kolom 3 dan 4
     set "ip=%%c"
     set "TARGET=%%d"
   )
@@ -1150,7 +1178,7 @@ goto :eof
 
 
 
-:: ================= Pembantu UI =================
+:: ================= Bantuan UI =================
 :UI_INIT
 :: Dukungan escape ANSI + palet warna
 
