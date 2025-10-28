@@ -3,17 +3,22 @@ setlocal EnableExtensions EnableDelayedExpansion
 cd /d %~dp0
 
 :: ============================================================
-::  wifi_adb.bat  —  ADB Wi‑Fi Toolbox (all-in-one)
+::  wifi_adb.bat  —  ADB Wi‑Fi Toolbox (all-in-one)  [Custom Port Enabled]
 ::  - setup      : enable ADB over Wi‑Fi for USB devices + JSON inventory
 ::  - connect    : choose from list / manual IP, then launch scrcpy (presets + extras)
 ::  - list       : merge & show devices from JSON + ADB status
 ::  - usb-back   : switch all TCP devices back to USB mode
 ::  - disconnect : disconnect all ADB TCP endpoints
 ::  - pair       : Wireless debugging pairing (Android 11+)
+::  Notes:
+::    * This variant preserves the original structure but allows setting a custom ADB TCP/IP port
+::      (default 5555) during Setup and Connect flows.
 :: ============================================================
 
 set "FILE_SETUP=wifi_device_setup.json"
 set "FILE_CONN=wifi_device_connect.json"
+set "DEFAULT_IP=192.168.43.1"
+set "DEFAULT_ADB_PORT=5555"
 
 call :UI_INIT
 
@@ -83,6 +88,13 @@ echo.
 
 if not exist "%FILE_SETUP%" ( >"%FILE_SETUP%" echo [] )
 
+:: Ask once for the ADB Wi‑Fi port to use for adb tcpip (default 5555)
+set "ADB_PORT="
+set /p ADB_PORT="ADB Wi‑Fi port for tcpip (default %DEFAULT_ADB_PORT%): "
+if "%ADB_PORT%"=="" set "ADB_PORT=%DEFAULT_ADB_PORT%"
+for /f "delims=0123456789" %%x in ("%ADB_PORT%") do set "ADB_PORT="
+if "%ADB_PORT%"=="" set "ADB_PORT=%DEFAULT_ADB_PORT%"
+
 :WAIT_USB
 set "COUNT=0"
 for /f "skip=1 tokens=1,2" %%A in ('adb devices') do (
@@ -114,7 +126,7 @@ for /l %%I in (1,1,%COUNT%) do (
   set "SIZE="  & set "DPI="   & set "BATT="    & set "SSID_CUR=" & set "IP_CUR=" & set "ENDP_CUR="
 
   if /i "!USBSTATE!"=="device" (
-    adb -s !SER! tcpip 5555 >nul 2>&1
+    adb -s !SER! tcpip %ADB_PORT% >nul 2>&1
     adb -s !SER! wait-for-device >nul 2>&1
 
     call :GET_WIFI_IP "!SER!" IP_CUR
@@ -144,7 +156,7 @@ for /l %%I in (1,1,%COUNT%) do (
     if "!SSID_CUR!"=="=" set "SSID_CUR="
 
     if defined IP_CUR (
-      set "ENDP_CUR=!IP_CUR!:5555"
+      set "ENDP_CUR=!IP_CUR!:%ADB_PORT%"
       echo.!SEEN_IPS! | findstr /c:" !IP_CUR! " >nul && set "DUP_IP=1" || set "SEEN_IPS=!SEEN_IPS!!IP_CUR! "
       adb disconnect !ENDP_CUR! >nul 2>&1
       adb connect   !ENDP_CUR! >nul 2>&1
@@ -250,11 +262,22 @@ set "ip="
 set "TARGET="
 call :OFFER_LIST_COMBINED
 if not defined ip (
-  set /p ip="Enter Android IP [default 192.168.43.1] or press Enter for default: "
-  if "%ip%"=="" set "ip=192.168.43.1"
+  set /p ip="Enter Android IP (or IP:PORT) [default %DEFAULT_IP%]: "
+  if "%ip%"=="" set "ip=%DEFAULT_IP%"
 )
-if not defined TARGET set "TARGET=%ip%:5555"
-
+if not defined TARGET (
+  echo "%ip%" | findstr ":" >nul
+  if not errorlevel 1 (
+    set "TARGET=%ip%"
+  ) else (
+    set "ADB_PORT="
+    set /p ADB_PORT="ADB Wi‑Fi port [default %DEFAULT_ADB_PORT%]: "
+    if "%ADB_PORT%"=="" set "ADB_PORT=%DEFAULT_ADB_PORT%"
+    for /f "delims=0123456789" %%x in ("%ADB_PORT%") do set "ADB_PORT="
+    if "%ADB_PORT%"=="" set "ADB_PORT=%DEFAULT_ADB_PORT%"
+    set "TARGET=%ip%:%ADB_PORT%"
+  )
+)
 
 echo.
 echo %C_LBL%[ADB]%C_RST% connecting to %TARGET% ...
@@ -649,7 +672,7 @@ for /f "usebackq delims=" %%L in ("%PTH%") do (
 
   rem — when a closing brace is seen, commit one line
   if not "!L!"=="!L:}=!" (
-    if not defined EPX if defined IPX set "EPX=!IPX!:5555"
+    if not defined EPX if defined IPX set "EPX=!IPX!:%DEFAULT_ADB_PORT%"
     if defined SER if defined MOD if defined IPX if defined EPX (
       rem deduplicate by IP
       set "DUP="
@@ -744,11 +767,11 @@ if not "%PAIR_CODE%"=="" (
 )
 
 echo.
-echo If pairing succeeds, connect the device endpoint (usually IP:5555).
+echo If pairing succeeds, connect the device endpoint (usually IP:PORT). Default port is %DEFAULT_ADB_PORT%.
 set "C_EP="
-set /p C_EP="Endpoint to connect [default derived from IP:5555]: "
+set /p C_EP="Endpoint to connect [default derived from IP:%DEFAULT_ADB_PORT%]: "
 if "%C_EP%"=="" (
-  for /f "tokens=1 delims=:" %%h in ("%PAIR_EP%") do set "C_EP=%%h:5555"
+  for /f "tokens=1 delims=:" %%h in ("%PAIR_EP%") do set "C_EP=%%h:%DEFAULT_ADB_PORT%"
 )
 adb connect %C_EP%
 if /i "%~1"=="" (echo.& pause & goto :MAIN_MENU) else exit /b 0
@@ -872,8 +895,8 @@ for /f "usebackq delims=" %%O in ("__arr.tmp") do (
   )
 )
 >>"%PTH%" echo ]
-endlocal
-del /q "__arr.tmp" >nul 2>&1
+
+del /q "__entry.tmp" "__arr.tmp" >nul 2>&1
 goto :eof
 
 
@@ -945,6 +968,10 @@ if not defined IP_CUR (
 )
 echo !IP_CUR! | findstr /r "^[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*$" >nul || set "IP_CUR="
 
+set "CUR_PORT="
+for /f "tokens=2 delims=:" %%p in ("%SER%") do set "CUR_PORT=%%p"
+if "%CUR_PORT%"=="" set "CUR_PORT=%DEFAULT_ADB_PORT%"
+
 echo.
 call :UI_SEP
 echo BRAND      : !BRAND!
@@ -957,7 +984,7 @@ if defined BATT (echo BATTERY    : !BATT!%%) else echo BATTERY    : unknown
 if defined SSID_CUR (echo SSID       : !SSID_CUR!) else echo SSID       : not available
 if defined IP_CUR (
   echo WIFI_IP    : !IP_CUR!
-  echo ADB_TCP    : !IP_CUR!:5555
+  echo ADB_TCP    : !IP_CUR!:!CUR_PORT!
 ) else (
   echo WIFI_IP    : not available
   echo ADB_TCP    : %SER%
@@ -1019,8 +1046,10 @@ if defined IP_SAVE (
   set "J_IP="!VAL!""
 )
 
-set "EP_SAVE="
-if defined IP_SAVE (set "EP_SAVE=!IP_SAVE!:5555") else set "EP_SAVE=!TARGET_IN!"
+set "EP_SAVE=!TARGET_IN!"
+if "%EP_SAVE%"=="" (
+  if defined IP_SAVE (set "EP_SAVE=!IP_SAVE!:%DEFAULT_ADB_PORT%") else set "EP_SAVE=!TARGET_IN!"
+)
 call :JFIELD EP_SAVE J_EP
 
 > "__entry.tmp" echo {"timestamp":"%date% %time%","serial":"!SER_REAL!","brand":!J_BRAND!,"model":!J_MODEL!,"device":!J_DEVICE!,"android":!J_ANDROID!,"sdk":!J_SDK!,"resolution":!J_RES!,"dpi":!J_DPI!,"battery":!J_BATT!,"ssid":!J_SSID!,"ip":!J_IP!,"endpoint":!J_EP!}
