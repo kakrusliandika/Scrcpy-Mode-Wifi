@@ -56,13 +56,13 @@ cls
 call :UI_BAR
 echo %C_TITLE%   A D B   W i - F i   T o o l b o x%C_RST%
 call :UI_BAR
-echo  %C_NUM%[1]%C_RST% %C_LBL%Setup   %C_DIM%: Enable ADB over Wi‑Fi (USB) + save to %FILE_SETUP%%C_RST%
-echo  %C_NUM%[2]%C_RST% %C_LBL%Connect %C_DIM%: Pick from list / manual IP → scrcpy presets + extras%C_RST%
-echo  %C_NUM%[3]%C_RST% %C_LBL%List    %C_DIM%: Show known devices (from JSON) + ADB status%C_RST%
-echo  %C_NUM%[4]%C_RST% %C_LBL%USB-Back All%C_DIM%: Switch all TCP devices back to USB%C_RST%
-echo  %C_NUM%[5]%C_RST% %C_LBL%Disconnect All%C_DIM%: adb disconnect (all endpoints)%C_RST%
-echo  %C_NUM%[6]%C_RST% %C_LBL%Pair    %C_DIM%: Wireless debugging pairing (Android 11+)%C_RST%
-echo  %C_NUM%[0]%C_RST% %C_LBL%Exit%C_RST%
+echo  %C_NUM%[1]%C_RST% %C_LBL%Setup          %C_DIM%: Enable ADB over Wi‑Fi (USB) + save to %FILE_SETUP%%C_RST%
+echo  %C_NUM%[2]%C_RST% %C_LBL%Connect        %C_DIM%: Pick from list / manual IP → scrcpy presets + extras%C_RST%
+echo  %C_NUM%[3]%C_RST% %C_LBL%List           %C_DIM%: Show known devices (from JSON) + ADB status%C_RST%
+echo  %C_NUM%[4]%C_RST% %C_LBL%USB-Back All   %C_DIM%: Switch all TCP devices back to USB%C_RST%
+echo  %C_NUM%[5]%C_RST% %C_LBL%Disconnect All %C_DIM%: adb disconnect (all endpoints)%C_RST%
+echo  %C_NUM%[6]%C_RST% %C_LBL%Pair           %C_DIM%: Wireless debugging pairing (Android 11+)%C_RST%
+echo  %C_NUM%[0]%C_RST% %C_LBL%Exit           %C_RST%
 call :UI_BAR
 set "m="
 set /p m="%C_ASK%Choose:%C_RST% "
